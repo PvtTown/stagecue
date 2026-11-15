@@ -16,6 +16,8 @@ export const CATALOG: ShowEvent[] = [
     onsaleAt: '2026-11-20T14:00:00+08:00',
     ticketUrl: 'https://shanghaiconcerts.com/concerts/shanghai-ballet-nutcracker',
     summary: '上海大剧院版圣诞芭蕾回归红厅，柴可夫斯基经典冬日童话。',
+    blurb:
+      '圣诞季最经典的童话芭蕾：玩具胡桃夹子变成勇士，女孩走进糖果王国。故事好懂、场面漂亮，第一次看芭蕾或带家人都很合适。',
     tags: ['开幕演出季', '早鸟', '圣诞'],
   },
   {
@@ -31,6 +33,8 @@ export const CATALOG: ShowEvent[] = [
     onsaleAt: '2026-11-18T16:00:00+08:00',
     ticketUrl: 'https://shanghaiconcerts.com/concerts/shanghai-jingju-imperial-consort-of-tang',
     summary: '史依弘×李军领衔，海派经典《梨花颂》溯源梅派风华。',
+    blurb:
+      '讲杨贵妃与唐玄宗的故事，海派京剧名角主演。不懂京剧也能当「好看的唱腔 + 华美妆造」来入门；有早鸟价更合适尝试。',
     tags: ['早鸟八折', '京剧'],
   },
   {
@@ -45,6 +49,8 @@ export const CATALOG: ShowEvent[] = [
     onsaleAt: '2026-11-16T17:00:00+08:00',
     ticketUrl: 'https://shanghaiconcerts.com/concerts/philharmonix-vienna-berlin-music-club',
     summary: '严肃乐手的“不务正业”：古典 × 爵士 × 拉丁的镜厅欢乐夜。',
+    blurb:
+      '维也纳、柏林爱乐的乐手下班后组的跨界乐队，古典混爵士和拉丁，偏轻松热闹，不是正襟危坐的交响晚会。',
     tags: ['跨界', '室内乐'],
   },
   {
@@ -60,6 +66,8 @@ export const CATALOG: ShowEvent[] = [
     onsaleAt: '2026-11-17T16:00:00+08:00',
     ticketUrl: 'https://shanghaiconcerts.com/concerts/jan-vogler-cello-recital',
     summary: '古提琴完整演绎巴赫六首无大提琴组曲，中巡首站。',
+    blurb:
+      '一个人、一把大提琴，把巴赫六首无伴奏组曲拉完。音乐本身很有名，现场更考验安静与专注，适合想沉浸听一场的人。',
     tags: ['巴赫', '独奏'],
   },
   {
@@ -73,7 +81,10 @@ export const CATALOG: ShowEvent[] = [
     priceMin: 280,
     priceMax: 1280,
     onsaleAt: '2026-11-25T15:00:00+08:00',
+    ticketUrl: 'https://shanghaiconcerts.com/',
     summary: '《罪与罚》《奥涅金》《安娜·卡列尼娜》——俄罗斯文学改编驻演。',
+    blurb:
+      '俄罗斯编导艾夫曼把名著做成舞剧，戏剧味重、情绪强烈，比《胡桃夹子》更成人向，冲击感也更强。',
     tags: ['驻演', '文学芭蕾'],
   },
   {
@@ -88,6 +99,7 @@ export const CATALOG: ShowEvent[] = [
     priceMax: 880,
     onsaleAt: '2026-10-26T11:18:00+08:00',
     summary: '韩真、周莉亚力作，咏春拳与香云纱织入舞台叙事。',
+    blurb: '中国当代舞剧代表作之一，武术与绸缎视觉很强，故事节奏偏现代舞台剧。',
     tags: ['加场', '非遗'],
   },
   {
@@ -103,6 +115,7 @@ export const CATALOG: ShowEvent[] = [
     priceMax: 1280,
     onsaleAt: '2026-10-28T12:00:00+08:00',
     summary: '上海歌剧院呈现普契尼经典，红厅压轴秋夜。',
+    blurb: '普契尼名作：公主出谜招亲。里面有超耳熟的《今夜无人入睡》，是大歌剧常见入门选择。',
     tags: ['开幕演出季'],
   },
   {
@@ -117,6 +130,7 @@ export const CATALOG: ShowEvent[] = [
     priceMax: 1980,
     ticketUrl: 'https://ticketonline.shgtheatre.com/shtheatre/',
     summary: '人民广场水晶宫的告别季长档，面具与红玫瑰的最终章。',
+    blurb: '音乐剧里最出名的之一：面具幽灵、歌剧院、浪漫与惊悚。票偏贵，适合当必看清单打卡。',
     tags: ['长档', '热门'],
   },
   {
@@ -130,6 +144,7 @@ export const CATALOG: ShowEvent[] = [
     priceMin: 280,
     priceMax: 680,
     summary: '方旭、赵倩主演华语剧场经典书信体。',
+    blurb: '华语经典话剧，以书信推进感情线，偏细腻对白，适合喜欢故事与表演的观众。',
     tags: ['话剧'],
   },
   {
@@ -144,6 +159,7 @@ export const CATALOG: ShowEvent[] = [
     priceMax: 880,
     onsaleAt: '2026-10-29T16:00:00+08:00',
     summary: '单雯、张军联袂，折叠园林里重寻汤显祖至情。',
+    blurb: '昆曲名作《牡丹亭》的重逢叙事，水磨腔与园林意境，节奏比京剧更慢、更婉转。',
     tags: ['昆曲'],
   },
 ];

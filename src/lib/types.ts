@@ -24,6 +24,8 @@ export interface ShowEvent {
   onsaleAt?: string;
   ticketUrl?: string;
   summary: string;
+  /** Plain-language intro for deciding interest. */
+  blurb: string;
   tags: string[];
 }
 
@@ -35,8 +37,14 @@ export interface TasteProfile {
   keywords: string[];
 }
 
-/** onsale_early = notify ASAP; onsale = at the ticket-drop moment. */
-export type ReminderKind = 'onsale_early' | 'onsale' | 'show' | 'custom';
+/** onsale_day_before = 前一天; onsale = 开票前 5 分钟. */
+export type ReminderKind = 'onsale_day_before' | 'onsale' | 'show' | 'custom';
+
+export type InterestVote = 'yes' | 'no';
+
+export interface InterestMap {
+  [eventId: string]: InterestVote;
+}
 
 export interface Reminder {
   id: string;
@@ -45,8 +53,11 @@ export interface Reminder {
   fireAt: string;
   label: string;
   createdAt: string;
-  /** Real box-office open time, when known — shown alongside fireAt. */
   onsaleAt?: string;
+  venue?: string;
+  priceMin?: number;
+  priceMax?: number;
+  ticketUrl?: string;
 }
 
 export interface RankedEvent {

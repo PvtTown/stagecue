@@ -3,25 +3,37 @@ import { CATALOG, CITY_LABEL, GENRE_LABEL } from './data/events';
 import { rankUpcomingOnsales } from './lib/recommend';
 import {
   buildIcs,
+  buildInterestMailto,
   createOnsaleReminders,
-  defaultFireAt,
   downloadIcs,
   dueReminders,
   ensureNotificationPermission,
+  formatPrice,
   formatWhen,
   kindLabel,
-  makeId,
   pingReminder,
-  reminderLabel,
+  reminderDetails,
 } from './lib/reminders';
 import {
   DEFAULT_TASTE,
+  loadEmail,
+  loadInterest,
   loadReminders,
   loadTaste,
+  saveEmail,
+  saveInterest,
   saveReminders,
   saveTaste,
 } from './lib/storage';
-import type { City, Genre, Reminder, ReminderKind, ShowEvent, TasteProfile } from './lib/types';
+import type {
+  City,
+  Genre,
+  InterestMap,
+  InterestVote,
+  Reminder,
+  ShowEvent,
+  TasteProfile,
+} from './lib/types';
 
 const ALL_GENRES = Object.keys(GENRE_LABEL) as Genre[];
 const ALL_CITIES = Object.keys(CITY_LABEL) as City[];
@@ -44,9 +56,15 @@ function urgencyLabel(urgency: 'today' | 'soon' | 'later', hoursUntil: number): 
   return `${d} 天后开票`;
 }
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export default function App() {
   const [taste, setTaste] = useState<TasteProfile>(() => loadTaste());
   const [reminders, setReminders] = useState<Reminder[]>(() => loadReminders());
+  const [interest, setInterest] = useState<InterestMap>(() => loadInterest());
+  const [email, setEmail] = useState(() => loadEmail());
   const [keywordDraft, setKeywordDraft] = useState(taste.keywords.join(' '));
   const [toast, setToast] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -60,6 +78,14 @@ export default function App() {
   }, [reminders]);
 
   useEffect(() => {
+    saveInterest(interest);
+  }, [interest]);
+
+  useEffect(() => {
+    saveEmail(email);
+  }, [email]);
+
+  useEffect(() => {
     const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, []);
@@ -69,7 +95,8 @@ export default function App() {
     for (const r of due) {
       const flag = `stagecue.pinged.${r.id}`;
       if (sessionStorage.getItem(flag)) continue;
-      pingReminder(r);
+      const event = CATALOG.find((e) => e.id === r.eventId);
+      pingReminder(r, event);
       sessionStorage.setItem(flag, '1');
       setToast(`提醒到点：${r.label}`);
     }
@@ -83,6 +110,8 @@ export default function App() {
 
   const now = useMemo(() => new Date(nowTick), [nowTick]);
   const ranked = useMemo(() => rankUpcomingOnsales(CATALOG, taste, now), [taste, now]);
+  const pendingInterest = ranked.filter((r) => !interest[r.event.id]);
+  const interestedShows = ranked.filter((r) => interest[r.event.id] === 'yes');
 
   function updateTaste(patch: Partial<TasteProfile>) {
     setTaste((prev) => ({ ...prev, ...patch }));
@@ -94,68 +123,53 @@ export default function App() {
       .map((s) => s.trim())
       .filter(Boolean);
     updateTaste({ keywords });
-    setToast('口味已更新，未开票推荐已刷新');
+    setToast('口味已更新');
   }
 
-  async function addOnsalePair(event: ShowEvent) {
-    if (!event.onsaleAt) {
-      setToast('该场次暂无开票时间');
+  async function voteInterest(event: ShowEvent, vote: InterestVote) {
+    setInterest((prev) => ({ ...prev, [event.id]: vote }));
+    if (vote === 'no') {
+      setReminders((prev) =>
+        prev.filter(
+          (r) =>
+            !(r.eventId === event.id && (r.kind === 'onsale' || r.kind === 'onsale_day_before')),
+        ),
+      );
+      setToast(`已跳过：${event.title}`);
       return;
     }
+
+    if (!event.onsaleAt) {
+      setToast('该场次暂无开票时间，无法排提醒');
+      return;
+    }
+
     const pair = createOnsaleReminders(event, now);
     setReminders((prev) => [
       ...pair,
       ...prev.filter(
-        (r) => !(r.eventId === event.id && (r.kind === 'onsale' || r.kind === 'onsale_early')),
+        (r) =>
+          !(r.eventId === event.id && (r.kind === 'onsale' || r.kind === 'onsale_day_before')),
       ),
     ]);
+
+    downloadIcs(`${event.id}-onsale.ics`, buildIcs(event, 'onsale', pair[0]?.fireAt ?? event.onsaleAt));
+
     const ok = await ensureNotificationPermission();
-    const early = pair.find((r) => r.kind === 'onsale_early');
-    if (early) {
-      pingReminder(early);
-      sessionStorage.setItem(`stagecue.pinged.${early.id}`, '1');
+    if (email.trim() && isValidEmail(email)) {
+      window.location.href = buildInterestMailto(email.trim(), event);
     }
+
     const sale = formatWhen(event.onsaleAt);
     setToast(
       ok
-        ? `已加两条提醒：现在尽早通知 + 开票时刻 ${sale}`
-        : `已记下：尽早 + 开票 ${sale}（请允许浏览器通知；更稳请再导出日历）`,
-    );
-  }
-
-  async function addShowReminder(event: ShowEvent) {
-    const fireAt = defaultFireAt(event, 'show', now);
-    const reminder: Reminder = {
-      id: makeId(),
-      eventId: event.id,
-      kind: 'show',
-      fireAt,
-      label: reminderLabel(event, 'show'),
-      createdAt: new Date().toISOString(),
-    };
-    setReminders((prev) => [reminder, ...prev.filter((r) => !(r.eventId === event.id && r.kind === 'show'))]);
-    const ok = await ensureNotificationPermission();
-    setToast(
-      ok
-        ? `已添加开演提醒（${formatWhen(fireAt)}）`
-        : `已添加开演提醒（请允许浏览器通知）· ${formatWhen(fireAt)}`,
+        ? `感兴趣已记下：前一天 + 开票前 5 分钟（开票 ${sale}）。日历已下载。`
+        : `感兴趣已记下（开票 ${sale}）。请允许通知，并导入刚下载的日历。`,
     );
   }
 
   function removeReminder(id: string) {
     setReminders((prev) => prev.filter((r) => r.id !== id));
-  }
-
-  function exportCalendar(event: ShowEvent, kind: ReminderKind) {
-    const wantsOnsale = kind === 'onsale' || kind === 'onsale_early';
-    const resolved: ReminderKind = wantsOnsale && event.onsaleAt ? 'onsale' : wantsOnsale ? 'show' : kind;
-    const fireAt = defaultFireAt(event, resolved, now);
-    downloadIcs(`${event.id}-${resolved}.ics`, buildIcs(event, resolved, fireAt, now));
-    setToast(
-      resolved === 'onsale'
-        ? '已下载日历：开票时间 + 尽早闹钟 + 开票时刻闹钟'
-        : '已下载日历文件',
-    );
   }
 
   function resetTaste() {
@@ -172,17 +186,21 @@ export default function App() {
   }
 
   const dueIds = new Set(dueReminders(reminders, now).map((r) => r.id));
+  const eventById = useMemo(() => new Map(CATALOG.map((e) => [e.id, e])), []);
 
   return (
     <div className="app">
       <header className="hero">
         <div className="spot" aria-hidden />
         <p className="brand">StageCue</p>
-        <h2>只盯还没开票的场次</h2>
-        <p>每场都会写明开票时间；一点提醒就同时记下「现在」和「开票时刻」两条。</p>
+        <h2>先读简介，再决定感不感兴趣</h2>
+        <p>
+          感兴趣后自动排提醒：开票前一天 + 开票前 5 分钟。每条都含开票时间、场馆、票价、购票链接；日历进
+          iPhone 最稳。
+        </p>
         <div className="hero-cta">
-          <a className="btn btn-primary" href="#for-you">
-            看未开票推荐
+          <a className="btn btn-primary" href="#ask-interest">
+            看待确认场次
           </a>
           <a className="btn btn-ghost" href="#how-alert">
             提醒方式
@@ -261,6 +279,15 @@ export default function App() {
               }}
             />
           </div>
+          <div className="field">
+            <label>个人邮箱（感兴趣时发一封摘要到邮件 App）</label>
+            <input
+              type="email"
+              value={email}
+              placeholder="you@example.com"
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
           <div className="actions">
             <button type="button" className="btn btn-primary btn-small" onClick={applyKeywords}>
               应用口味
@@ -271,36 +298,42 @@ export default function App() {
           </div>
 
           <div className="how-alert" id="how-alert">
-            <h4>怎么提醒你</h4>
+            <h4>怎么提醒你（iPhone）</h4>
             <ol>
               <li>
-                <strong>浏览器通知</strong>：需授权。本页打开时最稳；关浏览器后可能收不到。
+                <strong>先读简介</strong>，点「感兴趣」或「跳过」。
               </li>
               <li>
-                <strong>手机日历（推荐）</strong>：点「导出日历」导入系统日历，开票时间 + 尽早/开票时刻闹钟由系统叫醒。
+                <strong>感兴趣</strong>→ 排「开票前一天 + 开票前 5 分钟」，并下载日历（请导入
+                iPhone）。
               </li>
               <li>
-                <strong>暂无</strong>：短信 / 微信 / 邮件（要后端账号，下一步再做）。
+                <strong>邮件</strong>：填写邮箱后，感兴趣会打开邮件草稿（四要素齐全）。自动发信需后续接邮箱服务。
+              </li>
+              <li>
+                每条提醒必含：开票时间、场馆、票价、购票链接。不做自动抢票。
               </li>
             </ol>
           </div>
         </aside>
 
         <main className="stack">
-          <section className="panel panel-hot" id="for-you">
+          <section className="panel panel-hot" id="ask-interest">
             <div className="section-head">
-              <h3>未开票推荐</h3>
+              <h3>这些要不要看？</h3>
               <p>
-                {ranked.length === 0
-                  ? '暂无未开票场次'
-                  : `${ranked.length} 场待开票 · 每场含开票时间；提醒=尽早+开票时刻`}
+                {pendingInterest.length === 0
+                  ? '待确认场次已清空'
+                  : `${pendingInterest.length} 场待你决定 · 先读简介再选`}
               </p>
             </div>
             <div className="stack">
-              {ranked.length === 0 && (
-                <p className="muted">目录里没有仍未开票的场次。有新开票日时会自动出现在这里。</p>
+              {pendingInterest.length === 0 && (
+                <p className="muted">
+                  没有待确认场次。可在下方「已感兴趣」管理提醒，或重置口味后再看。
+                </p>
               )}
-              {ranked.map(({ event, score, reasons, hoursUntil, urgency }) => (
+              {pendingInterest.map(({ event, hoursUntil, urgency, score, reasons }) => (
                 <article key={event.id} className={`event event-onsale urgency-${urgency}`}>
                   <div className="event-top">
                     <h4>{event.title}</h4>
@@ -309,30 +342,43 @@ export default function App() {
                       <span className="score">{Math.round(score)}</span>
                     </div>
                   </div>
+                  <p className="blurb">{event.blurb}</p>
                   <div className="meta time-block">
                     <div>
                       <span className="time-label">开票时间</span>
                       <strong>{formatWhen(event.onsaleAt!)}</strong>
                     </div>
                     <div>
-                      <span className="time-label">提醒计划</span>
-                      <strong>现在一次 · 开票时刻再一次</strong>
-                    </div>
-                    <div>
-                      <span className="time-label">开演</span>
+                      <span className="time-label">场馆</span>
                       <span>
-                        {formatWhen(event.startsAt)} · {event.venue} · {CITY_LABEL[event.city]}
+                        {event.venue} · {CITY_LABEL[event.city]}
                       </span>
                     </div>
                     <div>
                       <span className="time-label">票价</span>
+                      <span>{formatPrice(event.priceMin, event.priceMax)}</span>
+                    </div>
+                    <div>
+                      <span className="time-label">购票</span>
                       <span>
-                        ¥{event.priceMin}–{event.priceMax}
-                        {event.genres.map((g) => ` · ${GENRE_LABEL[g]}`).join('')}
+                        {event.ticketUrl ? (
+                          <a href={event.ticketUrl} target="_blank" rel="noreferrer">
+                            打开购票页
+                          </a>
+                        ) : (
+                          '待公布'
+                        )}
                       </span>
                     </div>
+                    <div>
+                      <span className="time-label">开演</span>
+                      <span>{formatWhen(event.startsAt)}</span>
+                    </div>
+                    <div>
+                      <span className="time-label">提醒若选是</span>
+                      <strong>开票前一天 + 开票前 5 分钟</strong>
+                    </div>
                   </div>
-                  <p className="meta">{event.summary}</p>
                   <div className="reasons">
                     {reasons.map((r) => (
                       <span key={r} className="reason">
@@ -344,83 +390,151 @@ export default function App() {
                     <button
                       type="button"
                       className="btn btn-primary btn-small"
-                      onClick={() => addOnsalePair(event)}
+                      onClick={() => voteInterest(event, 'yes')}
                     >
-                      加开票时间+双提醒
+                      感兴趣，排提醒
                     </button>
                     <button
                       type="button"
                       className="btn btn-ghost btn-small"
-                      onClick={() => exportCalendar(event, 'onsale')}
+                      onClick={() => voteInterest(event, 'no')}
                     >
-                      导出日历
+                      跳过
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-small"
-                      onClick={() => addShowReminder(event)}
-                    >
-                      另加开演提醒
-                    </button>
-                    {event.ticketUrl && (
-                      <a
-                        className="btn btn-ghost btn-small"
-                        href={event.ticketUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        购票信息
-                      </a>
-                    )}
                   </div>
                 </article>
               ))}
             </div>
           </section>
 
-          <section className="panel" id="reminders">
+          <section className="panel" id="interested">
             <div className="section-head">
-              <h3>提醒清单</h3>
-              <p>
-                {reminders.length} 条 · 每条含提醒时间
-                {reminders.some((r) => r.onsaleAt) ? '与开票时间' : ''}
-              </p>
+              <h3>已感兴趣</h3>
+              <p>{interestedShows.length} 场 · 已排前一天 / 开票前 5 分钟</p>
             </div>
-            {reminders.length === 0 ? (
-              <p className="muted">还没有提醒。点「加开票时间+双提醒」，会写入尽早 + 开票时刻两条。</p>
+            {interestedShows.length === 0 ? (
+              <p className="muted">还没有感兴趣的场次。先在上方读简介并选择。</p>
             ) : (
               <div className="stack">
-                {reminders.map((r) => (
-                  <div key={r.id} className={`reminder ${dueIds.has(r.id) ? 'due' : ''}`}>
-                    <strong>{r.label}</strong>
-                    <div className="meta time-block compact">
-                      <div>
-                        <span className="time-label">提醒时间</span>
-                        <strong>{formatWhen(r.fireAt)}</strong>
-                        {dueIds.has(r.id) ? ' · 已通知' : ''}
-                      </div>
-                      {r.onsaleAt && (
-                        <div>
-                          <span className="time-label">开票时间</span>
-                          <strong>{formatWhen(r.onsaleAt)}</strong>
-                        </div>
-                      )}
-                      <div>
-                        <span className="time-label">类型</span>
-                        <span>{kindLabel(r.kind)}</span>
-                      </div>
+                {interestedShows.map(({ event }) => (
+                  <article key={event.id} className="event">
+                    <div className="event-top">
+                      <h4>{event.title}</h4>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-small"
+                        onClick={() => voteInterest(event, 'no')}
+                      >
+                        取消兴趣
+                      </button>
                     </div>
+                    <p className="meta">{reminderDetails(event)}</p>
                     <div className="actions">
                       <button
                         type="button"
                         className="btn btn-ghost btn-small"
-                        onClick={() => removeReminder(r.id)}
+                        onClick={() =>
+                          downloadIcs(
+                            `${event.id}-onsale.ics`,
+                            buildIcs(event, 'onsale', event.onsaleAt!),
+                          )
+                        }
                       >
-                        删除
+                        再导出日历
                       </button>
+                      {event.ticketUrl && (
+                        <a
+                          className="btn btn-ghost btn-small"
+                          href={event.ticketUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          购票链接
+                        </a>
+                      )}
                     </div>
-                  </div>
+                  </article>
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel" id="reminders">
+            <div className="section-head">
+              <h3>提醒清单</h3>
+              <p>{reminders.length} 条 · 含开票时间 / 场馆 / 票价 / 链接</p>
+            </div>
+            {reminders.length === 0 ? (
+              <p className="muted">点「感兴趣，排提醒」后会出现在这里。</p>
+            ) : (
+              <div className="stack">
+                {reminders.map((r) => {
+                  const event = eventById.get(r.eventId);
+                  return (
+                    <div key={r.id} className={`reminder ${dueIds.has(r.id) ? 'due' : ''}`}>
+                      <strong>{r.label}</strong>
+                      <div className="meta time-block compact">
+                        <div>
+                          <span className="time-label">提醒时间</span>
+                          <strong>{formatWhen(r.fireAt)}</strong>
+                          {dueIds.has(r.id) ? ' · 已通知' : ''}
+                        </div>
+                        <div>
+                          <span className="time-label">类型</span>
+                          <span>{kindLabel(r.kind)}</span>
+                        </div>
+                        {(event || r.onsaleAt) && (
+                          <>
+                            <div>
+                              <span className="time-label">开票时间</span>
+                              <strong>
+                                {formatWhen((event?.onsaleAt ?? r.onsaleAt)!)}
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="time-label">场馆</span>
+                              <span>{event?.venue ?? r.venue}</span>
+                            </div>
+                            <div>
+                              <span className="time-label">票价</span>
+                              <span>
+                                {formatPrice(
+                                  event?.priceMin ?? r.priceMin ?? 0,
+                                  event?.priceMax ?? r.priceMax ?? 0,
+                                )}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="time-label">购票</span>
+                              <span>
+                                {(event?.ticketUrl ?? r.ticketUrl) ? (
+                                  <a
+                                    href={(event?.ticketUrl ?? r.ticketUrl)!}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    打开链接
+                                  </a>
+                                ) : (
+                                  '待公布'
+                                )}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-small"
+                          onClick={() => removeReminder(r.id)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>

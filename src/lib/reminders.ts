@@ -4,16 +4,40 @@ export function makeId(): string {
   return `r_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
+export function formatPrice(min: number, max: number): string {
+  return `¥${min}–${max}`;
+}
+
+/** Four required fields for every onsale alert. */
+export function reminderDetails(event: ShowEvent): string {
+  const sale = event.onsaleAt ? formatWhen(event.onsaleAt) : '待公布';
+  const link = event.ticketUrl ?? '购票链接待公布';
+  return [
+    `开票时间 ${sale}`,
+    `场馆 ${event.venue}`,
+    `票价 ${formatPrice(event.priceMin, event.priceMax)}`,
+    `购票 ${link}`,
+  ].join('\n');
+}
+
+export function reminderDetailsOneLine(event: ShowEvent): string {
+  return reminderDetails(event).replace(/\n/g, ' · ');
+}
+
 /**
- * Show alerts: 3 hours before curtain.
- * Onsale alerts are created as a pair via createOnsaleReminders (early + drop).
+ * Day-before: exactly 24h before onsale.
+ * Drop nudge: 5 minutes before onsale.
  */
 export function defaultFireAt(event: ShowEvent, kind: ReminderKind, now = new Date()): string {
-  if (kind === 'onsale_early') {
-    return now.toISOString();
-  }
-  if (kind === 'onsale' && event.onsaleAt) {
-    return new Date(event.onsaleAt).toISOString();
+  if ((kind === 'onsale_day_before' || kind === 'onsale') && event.onsaleAt) {
+    const onsale = new Date(event.onsaleAt);
+    if (kind === 'onsale_day_before') {
+      const t = new Date(onsale.getTime() - 24 * 3600_000);
+      // Missed the day-before window → catch up immediately.
+      return (t.getTime() < now.getTime() ? now : t).toISOString();
+    }
+    const t = new Date(onsale.getTime() - 5 * 60_000);
+    return (t.getTime() < now.getTime() ? now : t).toISOString();
   }
   if (kind === 'show') {
     const t = new Date(event.startsAt);
@@ -27,52 +51,66 @@ export function defaultFireAt(event: ShowEvent, kind: ReminderKind, now = new Da
 }
 
 export function reminderLabel(event: ShowEvent, kind: ReminderKind): string {
-  const sale = event.onsaleAt ? formatWhen(event.onsaleAt) : '';
-  if (kind === 'onsale_early') {
-    return sale ? `尽早提醒 · ${event.title}（开票 ${sale}）` : `尽早提醒 · ${event.title}`;
-  }
-  if (kind === 'onsale') {
-    return sale ? `开票时刻 · ${event.title}（${sale}）` : `开票时刻 · ${event.title}`;
-  }
+  if (kind === 'onsale_day_before') return `开票前一天 · ${event.title}`;
+  if (kind === 'onsale') return `开票前 5 分钟 · ${event.title}`;
   if (kind === 'show') return `开演提醒 · ${event.title}`;
   return `自定义提醒 · ${event.title}`;
 }
 
 export function kindLabel(kind: ReminderKind): string {
-  if (kind === 'onsale_early') return '尽早提醒';
-  if (kind === 'onsale') return '开票时刻';
+  if (kind === 'onsale_day_before') return '开票前一天';
+  if (kind === 'onsale') return '开票前 5 分钟';
   if (kind === 'show') return '开演';
   return '自定义';
 }
 
-/** One early ping (now) + one at the real onsale clock. */
+function attachEventFields(event: ShowEvent): Pick<
+  Reminder,
+  'onsaleAt' | 'venue' | 'priceMin' | 'priceMax' | 'ticketUrl'
+> {
+  return {
+    onsaleAt: event.onsaleAt,
+    venue: event.venue,
+    priceMin: event.priceMin,
+    priceMax: event.priceMax,
+    ticketUrl: event.ticketUrl,
+  };
+}
+
+/** After interest=yes: day-before + T-5min, both carrying the four required fields. */
 export function createOnsaleReminders(event: ShowEvent, now = new Date()): Reminder[] {
   if (!event.onsaleAt) return [];
   const createdAt = now.toISOString();
-  const onsaleAt = event.onsaleAt;
-  const early: Reminder = {
+  const fields = attachEventFields(event);
+  const dayBefore: Reminder = {
     id: makeId(),
     eventId: event.id,
-    kind: 'onsale_early',
-    fireAt: defaultFireAt(event, 'onsale_early', now),
-    label: reminderLabel(event, 'onsale_early'),
+    kind: 'onsale_day_before',
+    fireAt: defaultFireAt(event, 'onsale_day_before', now),
+    label: reminderLabel(event, 'onsale_day_before'),
     createdAt,
-    onsaleAt,
+    ...fields,
   };
-  const drop: Reminder = {
+  const fiveMin: Reminder = {
     id: makeId(),
     eventId: event.id,
     kind: 'onsale',
     fireAt: defaultFireAt(event, 'onsale', now),
     label: reminderLabel(event, 'onsale'),
     createdAt,
-    onsaleAt,
+    ...fields,
   };
-  // If sale is already due, keep a single drop row (early would duplicate).
-  if (new Date(onsaleAt).getTime() <= now.getTime()) {
-    return [drop];
+
+  const onsaleMs = new Date(event.onsaleAt).getTime();
+  if (onsaleMs <= now.getTime()) {
+    return [];
   }
-  return [early, drop];
+
+  // If day-before and T-5min collapse to the same instant, keep T-5min only.
+  if (dayBefore.fireAt === fiveMin.fireAt) {
+    return [fiveMin];
+  }
+  return [dayBefore, fiveMin];
 }
 
 /** Display times in China Standard Time (matches Shanghai box-office clocks). */
@@ -103,35 +141,55 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   return result === 'granted';
 }
 
-export function pingReminder(reminder: Reminder): void {
+export function pingReminder(reminder: Reminder, event?: ShowEvent): void {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const saleLine = reminder.onsaleAt ? `\n开票时间 ${formatWhen(reminder.onsaleAt)}` : '';
+  const details = event
+    ? reminderDetails(event)
+    : [
+        reminder.onsaleAt ? `开票时间 ${formatWhen(reminder.onsaleAt)}` : '',
+        reminder.venue ? `场馆 ${reminder.venue}` : '',
+        reminder.priceMin != null && reminder.priceMax != null
+          ? `票价 ${formatPrice(reminder.priceMin, reminder.priceMax)}`
+          : '',
+        reminder.ticketUrl ? `购票 ${reminder.ticketUrl}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
   new Notification('StageCue 提醒', {
-    body: `${reminder.label}\n提醒 ${formatWhen(reminder.fireAt)}${saleLine}`,
+    body: `${reminder.label}\n提醒 ${formatWhen(reminder.fireAt)}\n${details}`,
     tag: reminder.id,
   });
 }
 
-/** ICS VALARM: trigger as early as possible before onsale (up to 14 days). */
-function earlyOnsaleAlarmTrigger(onsaleAt: string, now = new Date()): string {
-  const onsale = new Date(onsaleAt).getTime();
-  const msUntil = onsale - now.getTime();
-  if (msUntil <= 0) return '-PT0S';
-  const maxEarlyMs = 14 * 24 * 3600_000;
-  const earlyMs = Math.min(msUntil, maxEarlyMs);
-  const minutes = Math.max(1, Math.round(earlyMs / 60_000));
-  return `-PT${minutes}M`;
+/** Mail draft for iPhone Mail — until server-side email is wired. */
+export function buildInterestMailto(email: string, event: ShowEvent): string {
+  const subject = encodeURIComponent(`StageCue 已标记感兴趣：${event.title}`);
+  const body = encodeURIComponent(
+    [
+      `你已标记感兴趣：${event.title}`,
+      '',
+      event.blurb,
+      '',
+      reminderDetails(event),
+      '',
+      '提醒计划：开票前一天 + 开票前 5 分钟',
+      '请同时把日历文件导入 iPhone，锁屏闹钟更稳。',
+    ].join('\n'),
+  );
+  return `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`;
 }
 
 /**
- * Calendar file for an onsale: event at real drop time, with
- * early alarm + at-the-moment alarm so both times are covered.
+ * Calendar event at onsale time with:
+ * - alarm 1 day before
+ * - alarm 5 minutes before
+ * Description always includes the four required fields.
  */
-export function buildIcs(event: ShowEvent, kind: ReminderKind, fireAt: string, now = new Date()): string {
+export function buildIcs(event: ShowEvent, kind: ReminderKind, fireAt: string): string {
   const stamp = (d: Date) =>
     d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
-  const isOnsale = kind === 'onsale' || kind === 'onsale_early';
+  const isOnsale = kind === 'onsale' || kind === 'onsale_day_before';
   const start =
     isOnsale && event.onsaleAt ? new Date(event.onsaleAt) : new Date(fireAt);
   const end = new Date(start.getTime() + 30 * 60_000);
@@ -141,13 +199,10 @@ export function buildIcs(event: ShowEvent, kind: ReminderKind, fireAt: string, n
       ? `观演：${event.title}`
       : event.title;
   const desc = [
-    event.venue,
-    event.summary,
-    event.onsaleAt ? `开票时间 ${formatWhen(event.onsaleAt)}` : '',
-    event.ticketUrl ?? '',
-  ]
-    .filter(Boolean)
-    .join('\\n');
+    event.blurb,
+    reminderDetails(event).replace(/\n/g, '\\n'),
+    '提醒：开票前一天 + 开票前 5 分钟',
+  ].join('\\n');
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -162,17 +217,20 @@ export function buildIcs(event: ShowEvent, kind: ReminderKind, fireAt: string, n
     `DESCRIPTION:${desc}`,
     `LOCATION:${event.venue}`,
   ];
+  if (event.ticketUrl) {
+    lines.push(`URL:${event.ticketUrl}`);
+  }
   if (isOnsale && event.onsaleAt) {
     lines.push(
       'BEGIN:VALARM',
       'ACTION:DISPLAY',
-      `TRIGGER:${earlyOnsaleAlarmTrigger(event.onsaleAt, now)}`,
-      `DESCRIPTION:尽早提醒开票：${event.title}（开票 ${formatWhen(event.onsaleAt)}）`,
+      'TRIGGER:-P1D',
+      `DESCRIPTION:开票前一天：${event.title}\\n${reminderDetails(event).replace(/\n/g, '\\n')}`,
       'END:VALARM',
       'BEGIN:VALARM',
       'ACTION:DISPLAY',
-      'TRIGGER:PT0S',
-      `DESCRIPTION:开票时刻：${event.title}（${formatWhen(event.onsaleAt)}）`,
+      'TRIGGER:-PT5M',
+      `DESCRIPTION:开票前 5 分钟：${event.title}\\n${reminderDetails(event).replace(/\n/g, '\\n')}`,
       'END:VALARM',
     );
   } else if (kind === 'show') {
