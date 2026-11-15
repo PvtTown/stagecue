@@ -6,9 +6,18 @@ const INTEREST_KEY = 'stagecue.interest.v1';
 const EMAIL_KEY = 'stagecue.email.v1';
 
 export const DEFAULT_TASTE: TasteProfile = {
-  genres: ['opera', 'ballet', 'musical', 'chamber'],
-  cities: ['shanghai'],
-  venues: ['上海大歌剧院', '上海大剧院'],
+  genres: ['opera', 'ballet', 'musical', 'chamber', 'symphony'],
+  cities: ['shanghai', 'suzhou'],
+  venues: [
+    '上海大歌剧院',
+    '上海大剧院',
+    '东方',
+    '上海交响乐团',
+    '上音歌剧院',
+    '上海音乐厅',
+    '金鸡湖',
+    '苏州文化艺术中心',
+  ],
   budgetMax: 1280,
   keywords: [],
 };

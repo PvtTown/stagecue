@@ -5,7 +5,7 @@ function venueMatch(eventVenue: string, preferred: string[]): boolean {
   return preferred.some((v) => eventVenue.includes(v) || v.includes(eventVenue));
 }
 
-export type OnsaleUrgency = 'today' | 'soon' | 'later';
+export type OnsaleUrgency = 'today' | 'soon' | 'later' | 'TBA';
 
 export interface UpcomingOnsale {
   event: ShowEvent;
@@ -15,34 +15,43 @@ export interface UpcomingOnsale {
 
 export interface RankedUpcoming extends RankedEvent, UpcomingOnsale {}
 
-/** True when tickets are announced and the drop is still in the future. */
+/**
+ * Unsold / not-yet: future onSaleAt, or 上海乐历 ticketStatus=not_yet
+ * (开票时刻可能尚未公布).
+ */
 export function isUpcomingOnsale(event: ShowEvent, now = new Date()): boolean {
-  if (!event.onsaleAt) return false;
-  return new Date(event.onsaleAt).getTime() > now.getTime();
+  if (event.ticketStatus === 'not_yet') return true;
+  if (event.onsaleAt && new Date(event.onsaleAt).getTime() > now.getTime()) return true;
+  return false;
 }
 
 function urgencyFor(hoursUntil: number): OnsaleUrgency {
+  if (!Number.isFinite(hoursUntil)) return 'TBA';
   if (hoursUntil <= 24) return 'today';
   if (hoursUntil <= 72) return 'soon';
   return 'later';
 }
 
-/** Future ticket drops only, soonest first. */
+/** Future / not-yet ticket drops, soonest first (TBA last). */
 export function listUpcomingOnsales(catalog: ShowEvent[], now = new Date()): UpcomingOnsale[] {
   const out: UpcomingOnsale[] = [];
   for (const event of catalog) {
-    if (!event.onsaleAt) continue;
-    const hoursUntil = (new Date(event.onsaleAt).getTime() - now.getTime()) / 3600_000;
-    if (hoursUntil <= 0) continue;
-    out.push({ event, hoursUntil, urgency: urgencyFor(hoursUntil) });
+    if (!isUpcomingOnsale(event, now)) continue;
+    const hoursUntil = event.onsaleAt
+      ? (new Date(event.onsaleAt).getTime() - now.getTime()) / 3600_000
+      : Number.POSITIVE_INFINITY;
+    if (event.onsaleAt && hoursUntil <= 0 && event.ticketStatus !== 'not_yet') continue;
+    out.push({
+      event,
+      hoursUntil: event.onsaleAt && hoursUntil > 0 ? hoursUntil : Number.POSITIVE_INFINITY,
+      urgency: urgencyFor(
+        event.onsaleAt && hoursUntil > 0 ? hoursUntil : Number.POSITIVE_INFINITY,
+      ),
+    });
   }
-  return out.sort((a, b) => a.hoursUntil - b.hoursUntil);
+  return out.sort((a, b) => a.hoursUntil - b.hoursUntil || a.event.startsAt.localeCompare(b.event.startsAt));
 }
 
-/**
- * Taste-rank only shows that have not gone on sale yet.
- * Already-on-sale and no-onsale-date rows are skipped — they sell out too fast to chase.
- */
 export function rankEvents(catalog: ShowEvent[], taste: TasteProfile, now = new Date()): RankedEvent[] {
   return rankUpcomingOnsales(catalog, taste, now).map(({ event, score, reasons }) => ({
     event,
@@ -51,7 +60,7 @@ export function rankEvents(catalog: ShowEvent[], taste: TasteProfile, now = new 
   }));
 }
 
-/** Upcoming onsales ranked by taste + how soon tickets drop. */
+/** Upcoming / not-yet onsales ranked by taste + how soon tickets drop. */
 export function rankUpcomingOnsales(
   catalog: ShowEvent[],
   taste: TasteProfile,
@@ -60,13 +69,15 @@ export function rankUpcomingOnsales(
   const ranked: RankedUpcoming[] = [];
 
   for (const event of catalog) {
-    if (!isUpcomingOnsale(event, now) || !event.onsaleAt) continue;
+    if (!isUpcomingOnsale(event, now)) continue;
 
     const end = new Date(event.endsAt ?? event.startsAt);
     if (end.getTime() < now.getTime() - 12 * 3600_000) continue;
 
-    const hoursUntil = (new Date(event.onsaleAt).getTime() - now.getTime()) / 3600_000;
-    const urgency = urgencyFor(hoursUntil);
+    const hoursUntil = event.onsaleAt
+      ? (new Date(event.onsaleAt).getTime() - now.getTime()) / 3600_000
+      : Number.POSITIVE_INFINITY;
+    const urgency = urgencyFor(hoursUntil > 0 ? hoursUntil : Number.POSITIVE_INFINITY);
     const reasons: string[] = [];
     let score = 0;
 
@@ -109,18 +120,23 @@ export function rankUpcomingOnsales(
       }
     }
 
-    if (hoursUntil <= 24) {
-      score += 55;
-      reasons.push('24 小时内开票');
-    } else if (hoursUntil <= 72) {
-      score += 40;
-      reasons.push('即将开票');
-    } else if (hoursUntil <= 24 * 14) {
-      score += 28;
-      reasons.push('两周内开票');
+    if (Number.isFinite(hoursUntil) && hoursUntil > 0) {
+      if (hoursUntil <= 24) {
+        score += 55;
+        reasons.push('24 小时内开票');
+      } else if (hoursUntil <= 72) {
+        score += 40;
+        reasons.push('即将开票');
+      } else if (hoursUntil <= 24 * 14) {
+        score += 28;
+        reasons.push('两周内开票');
+      } else {
+        score += 16;
+        reasons.push('已排开票日');
+      }
     } else {
-      score += 16;
-      reasons.push('已排开票日');
+      score += 12;
+      reasons.push('未开票（时刻待公布）');
     }
 
     const daysToShow = (new Date(event.startsAt).getTime() - now.getTime()) / 86400_000;
@@ -129,20 +145,22 @@ export function rankUpcomingOnsales(
       reasons.push('三周内开演');
     }
 
-    if (event.tags.includes('热门') || event.tags.includes('长档')) {
-      score += 6;
+    if (event.collisions?.length) {
+      score += 4;
+      reasons.push(`同日另有 ${event.collisions.length} 场撞车`);
     }
 
     ranked.push({
       event,
       score,
       reasons: reasons.slice(0, 4),
-      hoursUntil,
+      hoursUntil: Number.isFinite(hoursUntil) && hoursUntil > 0 ? hoursUntil : Number.POSITIVE_INFINITY,
       urgency,
     });
   }
 
   return ranked.sort(
-    (a, b) => b.score - a.score || a.hoursUntil - b.hoursUntil || a.event.startsAt.localeCompare(b.event.startsAt),
+    (a, b) =>
+      b.score - a.score || a.hoursUntil - b.hoursUntil || a.event.startsAt.localeCompare(b.event.startsAt),
   );
 }

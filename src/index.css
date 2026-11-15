@@ -392,6 +392,15 @@ input[type='datetime-local'] {
   color: var(--ink);
 }
 
+.source-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+}
+
+.source-note code {
+  font-size: 0.75rem;
+}
+
 .how-alert {
   margin-top: 1.25rem;
   padding-top: 1rem;

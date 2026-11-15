@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CATALOG, CITY_LABEL, GENRE_LABEL } from './data/events';
-import { rankUpcomingOnsales } from './lib/recommend';
+import { CATALOG, CITY_LABEL, GENRE_LABEL, YUELI_ATTRIBUTION, YUELI_SYNCED_AT } from './data/events';
+import { rankUpcomingOnsales, type OnsaleUrgency } from './lib/recommend';
 import {
   buildIcs,
   buildInterestMailto,
@@ -37,13 +37,24 @@ import type {
 
 const ALL_GENRES = Object.keys(GENRE_LABEL) as Genre[];
 const ALL_CITIES = Object.keys(CITY_LABEL) as City[];
-const VENUE_PRESETS = ['上海大歌剧院', '上海大剧院', '上海文化广场', '东方艺术中心'];
+const VENUE_PRESETS = [
+  '上海大歌剧院',
+  '上海大剧院',
+  '东方',
+  '上海交响乐团',
+  '上音歌剧院',
+  '上海音乐厅',
+  '金鸡湖',
+  '苏州文化艺术中心',
+  '杭州大剧院',
+];
 
 function toggleIn<T extends string>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
 }
 
-function urgencyLabel(urgency: 'today' | 'soon' | 'later', hoursUntil: number): string {
+function urgencyLabel(urgency: OnsaleUrgency, hoursUntil: number): string {
+  if (urgency === 'TBA' || !Number.isFinite(hoursUntil)) return '开票时刻待公布';
   if (urgency === 'today') {
     const h = Math.max(1, Math.round(hoursUntil));
     return h <= 1 ? '约 1 小时内开票' : `${h} 小时内开票`;
@@ -140,7 +151,15 @@ export default function App() {
     }
 
     if (!event.onsaleAt) {
-      setToast('该场次暂无开票时间，无法排提醒');
+      const ok = await ensureNotificationPermission();
+      if (email.trim() && isValidEmail(email)) {
+        window.location.href = buildInterestMailto(email.trim(), event);
+      }
+      setToast(
+        ok
+          ? '感兴趣已记下。开票时刻待公布——一有确切时间再排「前一天 + 前 5 分钟」。'
+          : '感兴趣已记下（开票时刻待公布）。可先允许通知。',
+      );
       return;
     }
 
@@ -195,8 +214,8 @@ export default function App() {
         <p className="brand">StageCue</p>
         <h2>先读简介，再决定感不感兴趣</h2>
         <p>
-          感兴趣后自动排提醒：开票前一天 + 开票前 5 分钟。每条都含开票时间、场馆、票价、购票链接；日历进
-          iPhone 最稳。
+          目录同步自上海乐历：上海 / 苏州 / 杭州多馆未开票场次（含同日撞车）。感兴趣后排「开票前一天 + 前 5
+          分钟」；日历进 iPhone 最稳。
         </p>
         <div className="hero-cta">
           <a className="btn btn-primary" href="#ask-interest">
@@ -251,7 +270,7 @@ export default function App() {
                   className={`chip ${taste.venues.includes(v) ? 'on' : ''}`}
                   onClick={() => updateTaste({ venues: toggleIn(taste.venues, v) })}
                 >
-                  {v.replace('上海', '')}
+                  {v.replace(/^上海/, '').replace('文化艺术中心', '文艺中心')}
                 </button>
               ))}
             </div>
@@ -346,12 +365,12 @@ export default function App() {
                   <div className="meta time-block">
                     <div>
                       <span className="time-label">开票时间</span>
-                      <strong>{formatWhen(event.onsaleAt!)}</strong>
+                      <strong>{event.onsaleAt ? formatWhen(event.onsaleAt) : '待公布'}</strong>
                     </div>
                     <div>
                       <span className="time-label">场馆</span>
                       <span>
-                        {event.venue} · {CITY_LABEL[event.city]}
+                        {event.venue} · {CITY_LABEL[event.city] ?? event.city}
                       </span>
                     </div>
                     <div>
@@ -376,8 +395,16 @@ export default function App() {
                     </div>
                     <div>
                       <span className="time-label">提醒若选是</span>
-                      <strong>开票前一天 + 开票前 5 分钟</strong>
+                      <strong>
+                        {event.onsaleAt ? '开票前一天 + 开票前 5 分钟' : '时刻待公布后自动可排'}
+                      </strong>
                     </div>
+                    {!!event.collisions?.length && (
+                      <div>
+                        <span className="time-label">同日撞车</span>
+                        <span>{event.collisions.join('；')}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="reasons">
                     {reasons.map((r) => (
@@ -458,6 +485,12 @@ export default function App() {
               </div>
             )}
           </section>
+
+          <p className="muted source-note">
+            数据 {YUELI_ATTRIBUTION} · 同步于{' '}
+            {new Date(YUELI_SYNCED_AT).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })} ·{' '}
+            <code>npm run sync:yueli</code>
+          </p>
 
           <section className="panel" id="reminders">
             <div className="section-head">

@@ -8,7 +8,9 @@ export type Genre =
   | 'dance'
   | 'chamber';
 
-export type City = 'shanghai' | 'hongkong' | 'singapore' | 'beijing';
+export type City = 'shanghai' | 'hongkong' | 'singapore' | 'beijing' | 'suzhou' | 'hangzhou';
+
+export type TicketStatus = 'not_yet' | 'on_sale' | 'sold_out' | 'unknown';
 
 export interface ShowEvent {
   id: string;
@@ -27,6 +29,10 @@ export interface ShowEvent {
   /** Plain-language intro for deciding interest. */
   blurb: string;
   tags: string[];
+  ticketStatus?: TicketStatus;
+  sourceUrl?: string;
+  /** Same-calendar-day collision titles from 上海乐历撞车. */
+  collisions?: string[];
 }
 
 export interface TasteProfile {

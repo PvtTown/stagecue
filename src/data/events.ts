@@ -1,168 +1,34 @@
 import type { ShowEvent } from '../lib/types';
+import { attachCollisions, mapYueliRow } from '../lib/yueliMap';
+import type { YueliPayload } from '../lib/yueliMap';
+import yueli from './yueli.json' with { type: 'json' };
 
-/** Seed catalog — Shanghai Grand Opera House + nearby stages (2026–2027). */
-export const CATALOG: ShowEvent[] = [
-  {
-    id: 'sgoh-nutcracker-2026',
-    title: '上海芭蕾舞团《胡桃夹子》',
-    titleEn: 'The Nutcracker',
-    venue: '上海大歌剧院·红厅',
-    city: 'shanghai',
-    genres: ['ballet'],
-    startsAt: '2026-12-24T19:30:00+08:00',
-    endsAt: '2026-12-27T19:30:00+08:00',
-    priceMin: 100,
-    priceMax: 880,
-    onsaleAt: '2026-11-20T14:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/shanghai-ballet-nutcracker',
-    summary: '上海大剧院版圣诞芭蕾回归红厅，柴可夫斯基经典冬日童话。',
-    blurb:
-      '圣诞季最经典的童话芭蕾：玩具胡桃夹子变成勇士，女孩走进糖果王国。故事好懂、场面漂亮，第一次看芭蕾或带家人都很合适。',
-    tags: ['开幕演出季', '早鸟', '圣诞'],
-  },
-  {
-    id: 'sgoh-tang-consort-2026',
-    title: '京剧《大唐贵妃》',
-    venue: '上海大歌剧院·红厅',
-    city: 'shanghai',
-    genres: ['chinese_opera'],
-    startsAt: '2026-12-04T19:30:00+08:00',
-    endsAt: '2026-12-05T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 680,
-    onsaleAt: '2026-11-18T16:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/shanghai-jingju-imperial-consort-of-tang',
-    summary: '史依弘×李军领衔，海派经典《梨花颂》溯源梅派风华。',
-    blurb:
-      '讲杨贵妃与唐玄宗的故事，海派京剧名角主演。不懂京剧也能当「好看的唱腔 + 华美妆造」来入门；有早鸟价更合适尝试。',
-    tags: ['早鸟八折', '京剧'],
-  },
-  {
-    id: 'sgoh-philharmonix-2026',
-    title: '维也纳-柏林爱乐音乐家合奏团 Philharmonix',
-    venue: '上海大歌剧院·镜厅',
-    city: 'shanghai',
-    genres: ['chamber', 'symphony'],
-    startsAt: '2026-12-12T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 880,
-    onsaleAt: '2026-11-16T17:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/philharmonix-vienna-berlin-music-club',
-    summary: '严肃乐手的“不务正业”：古典 × 爵士 × 拉丁的镜厅欢乐夜。',
-    blurb:
-      '维也纳、柏林爱乐的乐手下班后组的跨界乐队，古典混爵士和拉丁，偏轻松热闹，不是正襟危坐的交响晚会。',
-    tags: ['跨界', '室内乐'],
-  },
-  {
-    id: 'sgoh-vogler-bach-2026',
-    title: '扬·沃格勒演绎巴赫无伴奏大提琴组曲',
-    titleEn: 'Jan Vogler — Bach Cello Suites (Unaccompanied)',
-    venue: '上海大歌剧院·镜厅',
-    city: 'shanghai',
-    genres: ['chamber'],
-    startsAt: '2026-12-04T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 880,
-    onsaleAt: '2026-11-17T16:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/jan-vogler-cello-recital',
-    summary: '完整演绎巴赫六首无伴奏大提琴组曲，中巡首站。',
-    blurb:
-      '「无伴奏」= 没有钢琴等其他乐器跟着，不是没有大提琴。就是一个人一把大提琴，把巴赫六首组曲拉完；现场安静、专注。',
-    tags: ['巴赫', '独奏'],
-  },
-  {
-    id: 'sgoh-efman-2026',
-    title: '圣彼得堡艾夫曼芭蕾三部曲',
-    venue: '上海大歌剧院·申厅',
-    city: 'shanghai',
-    genres: ['ballet', 'dance'],
-    startsAt: '2026-12-09T19:30:00+08:00',
-    endsAt: '2026-12-18T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 1280,
-    onsaleAt: '2026-11-25T15:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/',
-    summary: '《罪与罚》《奥涅金》《安娜·卡列尼娜》——俄罗斯文学改编驻演。',
-    blurb:
-      '俄罗斯编导艾夫曼把名著做成舞剧，戏剧味重、情绪强烈，比《胡桃夹子》更成人向，冲击感也更强。',
-    tags: ['驻演', '文学芭蕾'],
-  },
-  {
-    id: 'sgoh-wingchun-2026',
-    title: '舞剧《咏春》',
-    venue: '上海大歌剧院',
-    city: 'shanghai',
-    genres: ['dance'],
-    startsAt: '2026-12-18T19:30:00+08:00',
-    endsAt: '2026-12-20T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 880,
-    onsaleAt: '2026-10-26T11:18:00+08:00',
-    summary: '韩真、周莉亚力作，咏春拳与香云纱织入舞台叙事。',
-    blurb: '中国当代舞剧代表作之一，武术与绸缎视觉很强，故事节奏偏现代舞台剧。',
-    tags: ['加场', '非遗'],
-  },
-  {
-    id: 'sgoh-turandot-2026',
-    title: '歌剧《图兰朵》',
-    titleEn: 'Turandot',
-    venue: '上海大歌剧院·红厅',
-    city: 'shanghai',
-    genres: ['opera'],
-    startsAt: '2026-11-20T19:30:00+08:00',
-    endsAt: '2026-11-22T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 1280,
-    onsaleAt: '2026-10-28T12:00:00+08:00',
-    summary: '上海歌剧院呈现普契尼经典，红厅压轴秋夜。',
-    blurb: '普契尼名作：公主出谜招亲。里面有超耳熟的《今夜无人入睡》，是大歌剧常见入门选择。',
-    tags: ['开幕演出季'],
-  },
-  {
-    id: 'sgt-phantom-2026',
-    title: '原版音乐剧《剧院魅影》四十周年告别季',
-    venue: '上海大剧院·大剧场',
-    city: 'shanghai',
-    genres: ['musical'],
-    startsAt: '2026-11-15T19:30:00+08:00',
-    endsAt: '2026-12-27T19:30:00+08:00',
-    priceMin: 480,
-    priceMax: 1980,
-    ticketUrl: 'https://ticketonline.shgtheatre.com/shtheatre/',
-    summary: '人民广场水晶宫的告别季长档，面具与红玫瑰的最终章。',
-    blurb: '音乐剧里最出名的之一：面具幽灵、歌剧院、浪漫与惊悚。票偏贵，适合当必看清单打卡。',
-    tags: ['长档', '热门'],
-  },
-  {
-    id: 'sgt-letters-2026',
-    title: '话剧《收信快乐》25周年',
-    venue: '上海大剧院·中剧场',
-    city: 'shanghai',
-    genres: ['drama'],
-    startsAt: '2026-11-14T14:30:00+08:00',
-    endsAt: '2026-11-15T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 680,
-    summary: '方旭、赵倩主演华语剧场经典书信体。',
-    blurb: '华语经典话剧，以书信推进感情线，偏细腻对白，适合喜欢故事与表演的观众。',
-    tags: ['话剧'],
-  },
-  {
-    id: 'sgoh-peony-2026',
-    title: '昆曲《重逢牡丹亭》',
-    venue: '上海大歌剧院',
-    city: 'shanghai',
-    genres: ['chinese_opera'],
-    startsAt: '2026-11-27T19:30:00+08:00',
-    endsAt: '2026-11-28T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 880,
-    onsaleAt: '2026-10-29T16:00:00+08:00',
-    summary: '单雯、张军联袂，折叠园林里重寻汤显祖至情。',
-    blurb: '昆曲名作《牡丹亭》的重逢叙事，水磨腔与园林意境，节奏比京剧更慢、更婉转。',
-    tags: ['昆曲'],
-  },
-];
+/** Manual blurb overrides keyed by 上海乐历 slug (optional polish). */
+const BLURB_OVERRIDE: Record<string, string> = {
+  'schiff-staatskapelle-dresden':
+    '席夫与德累斯顿国家管弦乐团——很老牌的乐团配一位极较真的钢琴家；适合想听「正经大场」交响的人。',
+  'merry-widow-concert-version':
+    '音乐会版《风流寡妇》：轻歌剧名作，去掉大布景后更好听清配器，轻松好入口。',
+  'piano-romance-bertrand-chamayou-recital':
+    '沙马尤钢琴独奏：法国学派代表，独奏会才是他的主场，偏浪漫细腻。',
+};
+
+const payload = yueli as YueliPayload;
+
+const mapped = payload.items
+  .map((row) => {
+    const event = mapYueliRow(row);
+    if (!event) return null;
+    const override = BLURB_OVERRIDE[row.slug];
+    return override ? { ...event, blurb: override } : event;
+  })
+  .filter((e): e is ShowEvent => e !== null);
+
+/** Live-synced catalog from 上海乐历（上海 / 苏州 / 杭州等多馆，含撞车日场次）. */
+export const CATALOG: ShowEvent[] = attachCollisions(mapped);
+
+export const YUELI_SYNCED_AT = payload.syncedAt;
+export const YUELI_ATTRIBUTION = payload.attribution;
 
 export const GENRE_LABEL: Record<string, string> = {
   opera: '歌剧',
@@ -180,4 +46,6 @@ export const CITY_LABEL: Record<string, string> = {
   hongkong: '香港',
   singapore: '新加坡',
   beijing: '北京',
+  suzhou: '苏州',
+  hangzhou: '杭州',
 };
