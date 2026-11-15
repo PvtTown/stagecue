@@ -1,152 +1,34 @@
 import type { ShowEvent } from '../lib/types';
+import { attachCollisions, mapYueliRow } from '../lib/yueliMap';
+import type { YueliPayload } from '../lib/yueliMap';
+import yueli from './yueli.json' with { type: 'json' };
 
-/** Seed catalog — Shanghai Grand Opera House + nearby stages (2026–2027). */
-export const CATALOG: ShowEvent[] = [
-  {
-    id: 'sgoh-nutcracker-2026',
-    title: '上海芭蕾舞团《胡桃夹子》',
-    titleEn: 'The Nutcracker',
-    venue: '上海大歌剧院·红厅',
-    city: 'shanghai',
-    genres: ['ballet'],
-    startsAt: '2026-12-24T19:30:00+08:00',
-    endsAt: '2026-12-27T19:30:00+08:00',
-    priceMin: 100,
-    priceMax: 880,
-    onsaleAt: '2026-11-13T14:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/shanghai-ballet-nutcracker',
-    summary: '上海大剧院版圣诞芭蕾回归红厅，柴可夫斯基经典冬日童话。',
-    tags: ['开幕演出季', '早鸟', '圣诞'],
-  },
-  {
-    id: 'sgoh-tang-consort-2026',
-    title: '京剧《大唐贵妃》',
-    venue: '上海大歌剧院·红厅',
-    city: 'shanghai',
-    genres: ['chinese_opera'],
-    startsAt: '2026-12-04T19:30:00+08:00',
-    endsAt: '2026-12-05T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 680,
-    onsaleAt: '2026-11-11T16:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/shanghai-jingju-imperial-consort-of-tang',
-    summary: '史依弘×李军领衔，海派经典《梨花颂》溯源梅派风华。',
-    tags: ['早鸟八折', '京剧'],
-  },
-  {
-    id: 'sgoh-philharmonix-2026',
-    title: '维也纳-柏林爱乐音乐家合奏团 Philharmonix',
-    venue: '上海大歌剧院·镜厅',
-    city: 'shanghai',
-    genres: ['chamber', 'symphony'],
-    startsAt: '2026-12-12T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 880,
-    onsaleAt: '2026-11-10T17:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/philharmonix-vienna-berlin-music-club',
-    summary: '严肃乐手的“不务正业”：古典 × 爵士 × 拉丁的镜厅欢乐夜。',
-    tags: ['跨界', '室内乐'],
-  },
-  {
-    id: 'sgoh-vogler-bach-2026',
-    title: '扬·沃格勒演绎巴赫无大提琴组曲',
-    titleEn: 'Jan Vogler — Bach Solo Suites',
-    venue: '上海大歌剧院·镜厅',
-    city: 'shanghai',
-    genres: ['chamber'],
-    startsAt: '2026-12-04T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 880,
-    onsaleAt: '2026-11-10T16:00:00+08:00',
-    ticketUrl: 'https://shanghaiconcerts.com/concerts/jan-vogler-cello-recital',
-    summary: '古提琴完整演绎巴赫六首无大提琴组曲，中巡首站。',
-    tags: ['巴赫', '独奏'],
-  },
-  {
-    id: 'sgoh-efman-2026',
-    title: '圣彼得堡艾夫曼芭蕾三部曲',
-    venue: '上海大歌剧院·申厅',
-    city: 'shanghai',
-    genres: ['ballet', 'dance'],
-    startsAt: '2026-12-09T19:30:00+08:00',
-    endsAt: '2026-12-18T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 1280,
-    onsaleAt: '2026-11-04T15:00:00+08:00',
-    summary: '《罪与罚》《奥涅金》《安娜·卡列尼娜》——俄罗斯文学改编驻演。',
-    tags: ['驻演', '文学芭蕾'],
-  },
-  {
-    id: 'sgoh-wingchun-2026',
-    title: '舞剧《咏春》',
-    venue: '上海大歌剧院',
-    city: 'shanghai',
-    genres: ['dance'],
-    startsAt: '2026-12-18T19:30:00+08:00',
-    endsAt: '2026-12-20T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 880,
-    onsaleAt: '2026-10-26T11:18:00+08:00',
-    summary: '韩真、周莉亚力作，咏春拳与香云纱织入舞台叙事。',
-    tags: ['加场', '非遗'],
-  },
-  {
-    id: 'sgoh-turandot-2026',
-    title: '歌剧《图兰朵》',
-    titleEn: 'Turandot',
-    venue: '上海大歌剧院·红厅',
-    city: 'shanghai',
-    genres: ['opera'],
-    startsAt: '2026-11-20T19:30:00+08:00',
-    endsAt: '2026-11-22T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 1280,
-    onsaleAt: '2026-10-28T12:00:00+08:00',
-    summary: '上海歌剧院呈现普契尼经典，红厅压轴秋夜。',
-    tags: ['开幕演出季'],
-  },
-  {
-    id: 'sgt-phantom-2026',
-    title: '原版音乐剧《剧院魅影》四十周年告别季',
-    venue: '上海大剧院·大剧场',
-    city: 'shanghai',
-    genres: ['musical'],
-    startsAt: '2026-11-15T19:30:00+08:00',
-    endsAt: '2026-12-27T19:30:00+08:00',
-    priceMin: 480,
-    priceMax: 1980,
-    ticketUrl: 'https://ticketonline.shgtheatre.com/shtheatre/',
-    summary: '人民广场水晶宫的告别季长档，面具与红玫瑰的最终章。',
-    tags: ['长档', '热门'],
-  },
-  {
-    id: 'sgt-letters-2026',
-    title: '话剧《收信快乐》25周年',
-    venue: '上海大剧院·中剧场',
-    city: 'shanghai',
-    genres: ['drama'],
-    startsAt: '2026-11-14T14:30:00+08:00',
-    endsAt: '2026-11-15T19:30:00+08:00',
-    priceMin: 280,
-    priceMax: 680,
-    summary: '方旭、赵倩主演华语剧场经典书信体。',
-    tags: ['话剧'],
-  },
-  {
-    id: 'sgoh-peony-2026',
-    title: '昆曲《重逢牡丹亭》',
-    venue: '上海大歌剧院',
-    city: 'shanghai',
-    genres: ['chinese_opera'],
-    startsAt: '2026-11-27T19:30:00+08:00',
-    endsAt: '2026-11-28T19:30:00+08:00',
-    priceMin: 180,
-    priceMax: 880,
-    onsaleAt: '2026-10-29T16:00:00+08:00',
-    summary: '单雯、张军联袂，折叠园林里重寻汤显祖至情。',
-    tags: ['昆曲'],
-  },
-];
+/** Manual blurb overrides keyed by 上海乐历 slug (optional polish). */
+const BLURB_OVERRIDE: Record<string, string> = {
+  'schiff-staatskapelle-dresden':
+    '席夫与德累斯顿国家管弦乐团——很老牌的乐团配一位极较真的钢琴家；适合想听「正经大场」交响的人。',
+  'merry-widow-concert-version':
+    '音乐会版《风流寡妇》：轻歌剧名作，去掉大布景后更好听清配器，轻松好入口。',
+  'piano-romance-bertrand-chamayou-recital':
+    '沙马尤钢琴独奏：法国学派代表，独奏会才是他的主场，偏浪漫细腻。',
+};
+
+const payload = yueli as YueliPayload;
+
+const mapped = payload.items
+  .map((row) => {
+    const event = mapYueliRow(row);
+    if (!event) return null;
+    const override = BLURB_OVERRIDE[row.slug];
+    return override ? { ...event, blurb: override } : event;
+  })
+  .filter((e): e is ShowEvent => e !== null);
+
+/** Live-synced catalog from 上海乐历（上海 / 苏州 / 杭州等多馆，含撞车日场次）. */
+export const CATALOG: ShowEvent[] = attachCollisions(mapped);
+
+export const YUELI_SYNCED_AT = payload.syncedAt;
+export const YUELI_ATTRIBUTION = payload.attribution;
 
 export const GENRE_LABEL: Record<string, string> = {
   opera: '歌剧',
@@ -164,4 +46,6 @@ export const CITY_LABEL: Record<string, string> = {
   hongkong: '香港',
   singapore: '新加坡',
   beijing: '北京',
+  suzhou: '苏州',
+  hangzhou: '杭州',
 };

@@ -8,7 +8,9 @@ export type Genre =
   | 'dance'
   | 'chamber';
 
-export type City = 'shanghai' | 'hongkong' | 'singapore' | 'beijing';
+export type City = 'shanghai' | 'hongkong' | 'singapore' | 'beijing' | 'suzhou' | 'hangzhou';
+
+export type TicketStatus = 'not_yet' | 'on_sale' | 'sold_out' | 'unknown';
 
 export interface ShowEvent {
   id: string;
@@ -24,7 +26,13 @@ export interface ShowEvent {
   onsaleAt?: string;
   ticketUrl?: string;
   summary: string;
+  /** Plain-language intro for deciding interest. */
+  blurb: string;
   tags: string[];
+  ticketStatus?: TicketStatus;
+  sourceUrl?: string;
+  /** Same-calendar-day collision titles from 上海乐历撞车. */
+  collisions?: string[];
 }
 
 export interface TasteProfile {
@@ -35,7 +43,14 @@ export interface TasteProfile {
   keywords: string[];
 }
 
-export type ReminderKind = 'onsale' | 'show' | 'custom';
+/** onsale_day_before = 前一天; onsale = 开票前 5 分钟. */
+export type ReminderKind = 'onsale_day_before' | 'onsale' | 'show' | 'custom';
+
+export type InterestVote = 'yes' | 'no';
+
+export interface InterestMap {
+  [eventId: string]: InterestVote;
+}
 
 export interface Reminder {
   id: string;
@@ -44,6 +59,11 @@ export interface Reminder {
   fireAt: string;
   label: string;
   createdAt: string;
+  onsaleAt?: string;
+  venue?: string;
+  priceMin?: number;
+  priceMax?: number;
+  ticketUrl?: string;
 }
 
 export interface RankedEvent {

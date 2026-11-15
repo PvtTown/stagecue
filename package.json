@@ -7,10 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync:yueli": "node scripts/sync-yueli.mjs"
   },
   "dependencies": {
-    "date-fns": "^4.4.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
