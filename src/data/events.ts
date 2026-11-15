@@ -55,8 +55,8 @@ export const CATALOG: ShowEvent[] = [
   },
   {
     id: 'sgoh-vogler-bach-2026',
-    title: '扬·沃格勒演绎巴赫无大提琴组曲',
-    titleEn: 'Jan Vogler — Bach Solo Suites',
+    title: '扬·沃格勒演绎巴赫无伴奏大提琴组曲',
+    titleEn: 'Jan Vogler — Bach Cello Suites (Unaccompanied)',
     venue: '上海大歌剧院·镜厅',
     city: 'shanghai',
     genres: ['chamber'],
@@ -65,9 +65,9 @@ export const CATALOG: ShowEvent[] = [
     priceMax: 880,
     onsaleAt: '2026-11-17T16:00:00+08:00',
     ticketUrl: 'https://shanghaiconcerts.com/concerts/jan-vogler-cello-recital',
-    summary: '古提琴完整演绎巴赫六首无大提琴组曲，中巡首站。',
+    summary: '完整演绎巴赫六首无伴奏大提琴组曲，中巡首站。',
     blurb:
-      '一个人、一把大提琴，把巴赫六首无伴奏组曲拉完。音乐本身很有名，现场更考验安静与专注，适合想沉浸听一场的人。',
+      '「无伴奏」= 没有钢琴等其他乐器跟着，不是没有大提琴。就是一个人一把大提琴，把巴赫六首组曲拉完；现场安静、专注。',
     tags: ['巴赫', '独奏'],
   },
   {
