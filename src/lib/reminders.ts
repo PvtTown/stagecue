@@ -6,25 +6,32 @@ export function makeId(): string {
   return `r_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
-export function defaultFireAt(event: ShowEvent, kind: ReminderKind): string {
+/**
+ * Onsale alerts fire as soon as possible (now) so you hear about a sale
+ * the moment you care — not 15 minutes before tickets drop.
+ * Show alerts stay at 3 hours before curtain.
+ */
+export function defaultFireAt(event: ShowEvent, kind: ReminderKind, now = new Date()): string {
   if (kind === 'onsale' && event.onsaleAt) {
-    const t = new Date(event.onsaleAt);
-    t.setMinutes(t.getMinutes() - 15);
-    return t.toISOString();
+    // Notify as early as possible: the moment the user opts in.
+    return now.toISOString();
   }
   if (kind === 'show') {
     const t = new Date(event.startsAt);
     t.setHours(t.getHours() - 3);
     return t.toISOString();
   }
-  const t = new Date();
+  const t = new Date(now);
   t.setDate(t.getDate() + 1);
   t.setMinutes(0, 0, 0);
   return t.toISOString();
 }
 
 export function reminderLabel(event: ShowEvent, kind: ReminderKind): string {
-  if (kind === 'onsale') return `开票提醒 · ${event.title}`;
+  if (kind === 'onsale') {
+    const when = event.onsaleAt ? formatWhen(event.onsaleAt) : '';
+    return when ? `开票尽早提醒 · ${event.title}（开票 ${when}）` : `开票尽早提醒 · ${event.title}`;
+  }
   if (kind === 'show') return `开演提醒 · ${event.title}`;
   return `自定义提醒 · ${event.title}`;
 }
@@ -54,16 +61,30 @@ export function pingReminder(reminder: Reminder): void {
   }
 }
 
+/** ICS VALARM: trigger as early as possible before onsale (up to 14 days). */
+function earlyOnsaleAlarmTrigger(onsaleAt: string, now = new Date()): string {
+  const onsale = new Date(onsaleAt).getTime();
+  const msUntil = onsale - now.getTime();
+  if (msUntil <= 0) return '-PT0S';
+  const maxEarlyMs = 14 * 24 * 3600_000;
+  const earlyMs = Math.min(msUntil, maxEarlyMs);
+  const minutes = Math.max(1, Math.round(earlyMs / 60_000));
+  return `-PT${minutes}M`;
+}
+
 /** Build a simple .ics for calendar import. */
-export function buildIcs(event: ShowEvent, kind: ReminderKind, fireAt: string): string {
+export function buildIcs(event: ShowEvent, kind: ReminderKind, fireAt: string, now = new Date()): string {
   const stamp = (d: Date) =>
     d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const start = new Date(fireAt);
+
+  // For onsale, calendar event sits on the real sale time; alarm fires as early as possible.
+  const start =
+    kind === 'onsale' && event.onsaleAt ? new Date(event.onsaleAt) : new Date(fireAt);
   const end = new Date(start.getTime() + 30 * 60_000);
   const summary =
     kind === 'onsale' ? `开票：${event.title}` : kind === 'show' ? `观演：${event.title}` : event.title;
   const desc = [event.venue, event.summary, event.ticketUrl ?? ''].filter(Boolean).join('\\n');
-  return [
+  const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//StageCue//EN',
@@ -76,9 +97,26 @@ export function buildIcs(event: ShowEvent, kind: ReminderKind, fireAt: string): 
     `SUMMARY:${summary}`,
     `DESCRIPTION:${desc}`,
     `LOCATION:${event.venue}`,
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].join('\r\n');
+  ];
+  if (kind === 'onsale' && event.onsaleAt) {
+    lines.push(
+      'BEGIN:VALARM',
+      'ACTION:DISPLAY',
+      `TRIGGER:${earlyOnsaleAlarmTrigger(event.onsaleAt, now)}`,
+      `DESCRIPTION:开票尽早提醒：${event.title}`,
+      'END:VALARM',
+    );
+  } else if (kind === 'show') {
+    lines.push(
+      'BEGIN:VALARM',
+      'ACTION:DISPLAY',
+      'TRIGGER:-PT3H',
+      `DESCRIPTION:开演提醒：${event.title}`,
+      'END:VALARM',
+    );
+  }
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  return lines.join('\r\n');
 }
 
 export function downloadIcs(filename: string, content: string): void {

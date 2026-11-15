@@ -5,6 +5,26 @@ function venueMatch(eventVenue: string, preferred: string[]): boolean {
   return preferred.some((v) => eventVenue.includes(v) || v.includes(eventVenue));
 }
 
+export interface UpcomingOnsale {
+  event: ShowEvent;
+  hoursUntil: number;
+  urgency: 'today' | 'soon' | 'later';
+}
+
+/** Future ticket drops, soonest first — for the dedicated “即将开票” lane. */
+export function listUpcomingOnsales(catalog: ShowEvent[], now = new Date()): UpcomingOnsale[] {
+  const out: UpcomingOnsale[] = [];
+  for (const event of catalog) {
+    if (!event.onsaleAt) continue;
+    const hoursUntil = (new Date(event.onsaleAt).getTime() - now.getTime()) / 3600_000;
+    if (hoursUntil <= 0) continue;
+    const urgency: UpcomingOnsale['urgency'] =
+      hoursUntil <= 24 ? 'today' : hoursUntil <= 72 ? 'soon' : 'later';
+    out.push({ event, hoursUntil, urgency });
+  }
+  return out.sort((a, b) => a.hoursUntil - b.hoursUntil);
+}
+
 export function rankEvents(catalog: ShowEvent[], taste: TasteProfile, now = new Date()): RankedEvent[] {
   const ranked: RankedEvent[] = [];
 
@@ -59,9 +79,18 @@ export function rankEvents(catalog: ShowEvent[], taste: TasteProfile, now = new 
     if (event.onsaleAt) {
       const onsale = new Date(event.onsaleAt);
       const hours = (onsale.getTime() - now.getTime()) / 3600_000;
-      if (hours > 0 && hours < 72) {
-        score += 22;
+      if (hours > 0 && hours <= 24) {
+        score += 55;
+        reasons.push('24 小时内开票');
+      } else if (hours > 24 && hours <= 72) {
+        score += 40;
         reasons.push('即将开票');
+      } else if (hours > 72 && hours <= 24 * 14) {
+        score += 28;
+        reasons.push('两周内开票');
+      } else if (hours > 24 * 14) {
+        score += 16;
+        reasons.push('已排开票日');
       } else if (hours <= 0 && hours > -24 * 14) {
         score += 10;
         reasons.push('近期已开票');
