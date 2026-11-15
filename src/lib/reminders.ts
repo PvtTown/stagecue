@@ -1,5 +1,3 @@
-import { format } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 import type { Reminder, ReminderKind, ShowEvent } from './types';
 
 export function makeId(): string {
@@ -36,8 +34,20 @@ export function reminderLabel(event: ShowEvent, kind: ReminderKind): string {
   return `自定义提醒 · ${event.title}`;
 }
 
+/** Display times in China Standard Time (matches Shanghai box-office clocks). */
 export function formatWhen(iso: string): string {
-  return format(new Date(iso), 'M月d日 HH:mm', { locale: zhCN });
+  const d = new Date(iso);
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '';
+  return `${Number(get('month'))}月${Number(get('day'))}日 ${get('hour')}:${get('minute')}`;
 }
 
 export function dueReminders(reminders: Reminder[], now = new Date()): Reminder[] {

@@ -258,6 +258,14 @@ input[type='datetime-local'] {
   align-items: start;
 }
 
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex: none;
+}
+
 .event h4 {
   margin: 0;
   font-family: var(--font-display);

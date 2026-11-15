@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CATALOG, CITY_LABEL, GENRE_LABEL } from './data/events';
-import { listUpcomingOnsales, rankEvents } from './lib/recommend';
+import { rankUpcomingOnsales } from './lib/recommend';
 import {
   buildIcs,
   defaultFireAt,
@@ -80,8 +80,7 @@ export default function App() {
   }, [toast]);
 
   const now = useMemo(() => new Date(nowTick), [nowTick]);
-  const ranked = useMemo(() => rankEvents(CATALOG, taste, now), [taste, now]);
-  const upcoming = useMemo(() => listUpcomingOnsales(CATALOG, now), [now]);
+  const ranked = useMemo(() => rankUpcomingOnsales(CATALOG, taste, now), [taste, now]);
 
   function updateTaste(patch: Partial<TasteProfile>) {
     setTaste((prev) => ({ ...prev, ...patch }));
@@ -93,7 +92,7 @@ export default function App() {
       .map((s) => s.trim())
       .filter(Boolean);
     updateTaste({ keywords });
-    setToast('口味已更新，推荐已刷新');
+    setToast('口味已更新，未开票推荐已刷新');
   }
 
   async function addReminder(event: ShowEvent, kind: ReminderKind) {
@@ -117,7 +116,6 @@ export default function App() {
     ]);
     const ok = await ensureNotificationPermission();
     if (resolved === 'onsale') {
-      // Fire immediately — earliest possible in-app notice.
       pingReminder(reminder);
       sessionStorage.setItem(`stagecue.pinged.${reminder.id}`, '1');
       const sale = event.onsaleAt ? formatWhen(event.onsaleAt) : '';
@@ -170,11 +168,11 @@ export default function App() {
       <header className="hero">
         <div className="spot" aria-hidden />
         <p className="brand">StageCue</p>
-        <h2>开票一出就告诉你，不等最后一刻</h2>
-        <p>按口味排序演艺场次；即将开票优先置顶，提醒一设即达，日历可提前最多 14 天叫醒。</p>
+        <h2>只盯还没开票的场次</h2>
+        <p>已开票往往秒空。这里只推未开票演出，按口味排序，提醒一设即达。</p>
         <div className="hero-cta">
-          <a className="btn btn-primary" href="#upcoming">
-            看即将开票
+          <a className="btn btn-primary" href="#for-you">
+            看未开票推荐
           </a>
           <a className="btn btn-ghost" href="#reminders">
             管理提醒
@@ -264,84 +262,32 @@ export default function App() {
         </aside>
 
         <main className="stack">
-          <section className="panel panel-hot" id="upcoming">
+          <section className="panel panel-hot" id="for-you">
             <div className="section-head">
-              <h3>即将开票</h3>
+              <h3>未开票推荐</h3>
               <p>
-                {upcoming.length === 0
+                {ranked.length === 0
                   ? '暂无未开票场次'
-                  : `${upcoming.length} 场待开票 · 尽早提醒，不等开票前 15 分钟`}
+                  : `${ranked.length} 场待开票 · 已开票不展示（秒空难追）`}
               </p>
             </div>
-            {upcoming.length === 0 ? (
-              <p className="muted">目录里没有仍未开票的场次。下方仍可按口味浏览全部推荐。</p>
-            ) : (
-              <div className="stack">
-                {upcoming.map(({ event, hoursUntil, urgency }) => (
-                  <article key={event.id} className={`event event-onsale urgency-${urgency}`}>
-                    <div className="event-top">
-                      <h4>{event.title}</h4>
-                      <span className="badge-onsale">{urgencyLabel(urgency, hoursUntil)}</span>
-                    </div>
-                    <div className="meta">
-                      {event.venue} · {CITY_LABEL[event.city]}
-                      <br />
-                      开票 {formatWhen(event.onsaleAt!)} · 开演 {formatWhen(event.startsAt)}
-                      <br />
-                      ¥{event.priceMin}–{event.priceMax}
-                      {event.genres.map((g) => ` · ${GENRE_LABEL[g]}`).join('')}
-                    </div>
-                    <p className="meta">{event.summary}</p>
-                    <div className="actions">
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-small"
-                        onClick={() => addReminder(event, 'onsale')}
-                      >
-                        尽早提醒
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-small"
-                        onClick={() => exportCalendar(event, 'onsale')}
-                      >
-                        导出日历
-                      </button>
-                      {event.ticketUrl && (
-                        <a
-                          className="btn btn-ghost btn-small"
-                          href={event.ticketUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          购票信息
-                        </a>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel" id="for-you">
-            <div className="section-head">
-              <h3>为你推荐</h3>
-              <p>口味匹配 + 开票临近加权 · 含上海大歌剧院开幕季种子数据</p>
-            </div>
             <div className="stack">
-              {ranked.length === 0 && <p className="muted">没有匹配场次，试试放宽品类或预算。</p>}
-              {ranked.map(({ event, score, reasons }) => (
-                <article key={event.id} className="event">
+              {ranked.length === 0 && (
+                <p className="muted">目录里没有仍未开票的场次。有新开票日时会自动出现在这里。</p>
+              )}
+              {ranked.map(({ event, score, reasons, hoursUntil, urgency }) => (
+                <article key={event.id} className={`event event-onsale urgency-${urgency}`}>
                   <div className="event-top">
                     <h4>{event.title}</h4>
-                    <span className="score">{Math.round(score)}</span>
+                    <div className="badges">
+                      <span className="badge-onsale">{urgencyLabel(urgency, hoursUntil)}</span>
+                      <span className="score">{Math.round(score)}</span>
+                    </div>
                   </div>
                   <div className="meta">
                     {event.venue} · {CITY_LABEL[event.city]}
                     <br />
-                    开演 {formatWhen(event.startsAt)}
-                    {event.onsaleAt ? ` · 开票 ${formatWhen(event.onsaleAt)}` : ''}
+                    开票 {formatWhen(event.onsaleAt!)} · 开演 {formatWhen(event.startsAt)}
                     <br />
                     ¥{event.priceMin}–{event.priceMax}
                     {event.genres.map((g) => ` · ${GENRE_LABEL[g]}`).join('')}
@@ -355,33 +301,17 @@ export default function App() {
                     ))}
                   </div>
                   <div className="actions">
-                    {event.onsaleAt && new Date(event.onsaleAt).getTime() > now.getTime() && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-small"
-                        onClick={() => addReminder(event, 'onsale')}
-                      >
-                        尽早提醒开票
-                      </button>
-                    )}
                     <button
                       type="button"
-                      className="btn btn-ghost btn-small"
-                      onClick={() => addReminder(event, 'show')}
+                      className="btn btn-primary btn-small"
+                      onClick={() => addReminder(event, 'onsale')}
                     >
-                      提醒开演
+                      尽早提醒开票
                     </button>
                     <button
                       type="button"
                       className="btn btn-ghost btn-small"
-                      onClick={() =>
-                        exportCalendar(
-                          event,
-                          event.onsaleAt && new Date(event.onsaleAt).getTime() > now.getTime()
-                            ? 'onsale'
-                            : 'show',
-                        )
-                      }
+                      onClick={() => exportCalendar(event, 'onsale')}
                     >
                       导出日历
                     </button>
@@ -407,7 +337,7 @@ export default function App() {
               <p>{reminders.length} 条 · 开票尽早通知 + 浏览器 / ICS</p>
             </div>
             {reminders.length === 0 ? (
-              <p className="muted">还没有提醒。从「即将开票」点「尽早提醒」。</p>
+              <p className="muted">还没有提醒。从上方未开票推荐点「尽早提醒开票」。</p>
             ) : (
               <div className="stack">
                 {reminders.map((r) => (
