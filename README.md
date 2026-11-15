@@ -29,4 +29,4 @@ npm run preview
 
 ## 技术
 
-Vite · React 19 · TypeScript · date-fns
+Vite · React 19 · TypeScript
