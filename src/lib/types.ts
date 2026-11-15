@@ -35,7 +35,8 @@ export interface TasteProfile {
   keywords: string[];
 }
 
-export type ReminderKind = 'onsale' | 'show' | 'custom';
+/** onsale_early = notify ASAP; onsale = at the ticket-drop moment. */
+export type ReminderKind = 'onsale_early' | 'onsale' | 'show' | 'custom';
 
 export interface Reminder {
   id: string;
@@ -44,6 +45,8 @@ export interface Reminder {
   fireAt: string;
   label: string;
   createdAt: string;
+  /** Real box-office open time, when known — shown alongside fireAt. */
+  onsaleAt?: string;
 }
 
 export interface RankedEvent {

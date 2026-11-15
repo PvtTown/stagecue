@@ -3,11 +3,13 @@ import { CATALOG, CITY_LABEL, GENRE_LABEL } from './data/events';
 import { rankUpcomingOnsales } from './lib/recommend';
 import {
   buildIcs,
+  createOnsaleReminders,
   defaultFireAt,
   downloadIcs,
   dueReminders,
   ensureNotificationPermission,
   formatWhen,
+  kindLabel,
   makeId,
   pingReminder,
   reminderLabel,
@@ -75,7 +77,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 3200);
+    const t = window.setTimeout(() => setToast(null), 4200);
     return () => window.clearTimeout(t);
   }, [toast]);
 
@@ -95,41 +97,48 @@ export default function App() {
     setToast('口味已更新，未开票推荐已刷新');
   }
 
-  async function addReminder(event: ShowEvent, kind: ReminderKind) {
-    let resolved = kind;
-    if (resolved === 'onsale' && !event.onsaleAt) {
-      resolved = 'show';
-      setToast('该场次暂无开票时间，已改为开演提醒');
+  async function addOnsalePair(event: ShowEvent) {
+    if (!event.onsaleAt) {
+      setToast('该场次暂无开票时间');
+      return;
     }
-    const fireAt = defaultFireAt(event, resolved, now);
+    const pair = createOnsaleReminders(event, now);
+    setReminders((prev) => [
+      ...pair,
+      ...prev.filter(
+        (r) => !(r.eventId === event.id && (r.kind === 'onsale' || r.kind === 'onsale_early')),
+      ),
+    ]);
+    const ok = await ensureNotificationPermission();
+    const early = pair.find((r) => r.kind === 'onsale_early');
+    if (early) {
+      pingReminder(early);
+      sessionStorage.setItem(`stagecue.pinged.${early.id}`, '1');
+    }
+    const sale = formatWhen(event.onsaleAt);
+    setToast(
+      ok
+        ? `已加两条提醒：现在尽早通知 + 开票时刻 ${sale}`
+        : `已记下：尽早 + 开票 ${sale}（请允许浏览器通知；更稳请再导出日历）`,
+    );
+  }
+
+  async function addShowReminder(event: ShowEvent) {
+    const fireAt = defaultFireAt(event, 'show', now);
     const reminder: Reminder = {
       id: makeId(),
       eventId: event.id,
-      kind: resolved,
+      kind: 'show',
       fireAt,
-      label: reminderLabel(event, resolved),
+      label: reminderLabel(event, 'show'),
       createdAt: new Date().toISOString(),
     };
-    setReminders((prev) => [
-      reminder,
-      ...prev.filter((r) => !(r.eventId === event.id && r.kind === resolved)),
-    ]);
+    setReminders((prev) => [reminder, ...prev.filter((r) => !(r.eventId === event.id && r.kind === 'show'))]);
     const ok = await ensureNotificationPermission();
-    if (resolved === 'onsale') {
-      pingReminder(reminder);
-      sessionStorage.setItem(`stagecue.pinged.${reminder.id}`, '1');
-      const sale = event.onsaleAt ? formatWhen(event.onsaleAt) : '';
-      setToast(
-        ok
-          ? `已尽早提醒：开票 ${sale || '时间待定'}`
-          : `已记下开票 ${sale || ''}（请允许浏览器通知以便下次推送）`,
-      );
-      return;
-    }
     setToast(
       ok
-        ? `已添加提醒（${formatWhen(fireAt)}）`
-        : `已添加提醒（请允许浏览器通知）· ${formatWhen(fireAt)}`,
+        ? `已添加开演提醒（${formatWhen(fireAt)}）`
+        : `已添加开演提醒（请允许浏览器通知）· ${formatWhen(fireAt)}`,
     );
   }
 
@@ -138,12 +147,13 @@ export default function App() {
   }
 
   function exportCalendar(event: ShowEvent, kind: ReminderKind) {
-    const resolved = kind === 'onsale' && !event.onsaleAt ? 'show' : kind;
+    const wantsOnsale = kind === 'onsale' || kind === 'onsale_early';
+    const resolved: ReminderKind = wantsOnsale && event.onsaleAt ? 'onsale' : wantsOnsale ? 'show' : kind;
     const fireAt = defaultFireAt(event, resolved, now);
     downloadIcs(`${event.id}-${resolved}.ics`, buildIcs(event, resolved, fireAt, now));
     setToast(
       resolved === 'onsale'
-        ? '已下载日历：开票日事件 + 尽早闹钟（最多提前 14 天）'
+        ? '已下载日历：开票时间 + 尽早闹钟 + 开票时刻闹钟'
         : '已下载日历文件',
     );
   }
@@ -169,13 +179,13 @@ export default function App() {
         <div className="spot" aria-hidden />
         <p className="brand">StageCue</p>
         <h2>只盯还没开票的场次</h2>
-        <p>已开票往往秒空。这里只推未开票演出，按口味排序，提醒一设即达。</p>
+        <p>每场都会写明开票时间；一点提醒就同时记下「现在」和「开票时刻」两条。</p>
         <div className="hero-cta">
           <a className="btn btn-primary" href="#for-you">
             看未开票推荐
           </a>
-          <a className="btn btn-ghost" href="#reminders">
-            管理提醒
+          <a className="btn btn-ghost" href="#how-alert">
+            提醒方式
           </a>
         </div>
       </header>
@@ -259,6 +269,21 @@ export default function App() {
               重置
             </button>
           </div>
+
+          <div className="how-alert" id="how-alert">
+            <h4>怎么提醒你</h4>
+            <ol>
+              <li>
+                <strong>浏览器通知</strong>：需授权。本页打开时最稳；关浏览器后可能收不到。
+              </li>
+              <li>
+                <strong>手机日历（推荐）</strong>：点「导出日历」导入系统日历，开票时间 + 尽早/开票时刻闹钟由系统叫醒。
+              </li>
+              <li>
+                <strong>暂无</strong>：短信 / 微信 / 邮件（要后端账号，下一步再做）。
+              </li>
+            </ol>
+          </div>
         </aside>
 
         <main className="stack">
@@ -268,7 +293,7 @@ export default function App() {
               <p>
                 {ranked.length === 0
                   ? '暂无未开票场次'
-                  : `${ranked.length} 场待开票 · 已开票不展示（秒空难追）`}
+                  : `${ranked.length} 场待开票 · 每场含开票时间；提醒=尽早+开票时刻`}
               </p>
             </div>
             <div className="stack">
@@ -284,13 +309,28 @@ export default function App() {
                       <span className="score">{Math.round(score)}</span>
                     </div>
                   </div>
-                  <div className="meta">
-                    {event.venue} · {CITY_LABEL[event.city]}
-                    <br />
-                    开票 {formatWhen(event.onsaleAt!)} · 开演 {formatWhen(event.startsAt)}
-                    <br />
-                    ¥{event.priceMin}–{event.priceMax}
-                    {event.genres.map((g) => ` · ${GENRE_LABEL[g]}`).join('')}
+                  <div className="meta time-block">
+                    <div>
+                      <span className="time-label">开票时间</span>
+                      <strong>{formatWhen(event.onsaleAt!)}</strong>
+                    </div>
+                    <div>
+                      <span className="time-label">提醒计划</span>
+                      <strong>现在一次 · 开票时刻再一次</strong>
+                    </div>
+                    <div>
+                      <span className="time-label">开演</span>
+                      <span>
+                        {formatWhen(event.startsAt)} · {event.venue} · {CITY_LABEL[event.city]}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="time-label">票价</span>
+                      <span>
+                        ¥{event.priceMin}–{event.priceMax}
+                        {event.genres.map((g) => ` · ${GENRE_LABEL[g]}`).join('')}
+                      </span>
+                    </div>
                   </div>
                   <p className="meta">{event.summary}</p>
                   <div className="reasons">
@@ -304,9 +344,9 @@ export default function App() {
                     <button
                       type="button"
                       className="btn btn-primary btn-small"
-                      onClick={() => addReminder(event, 'onsale')}
+                      onClick={() => addOnsalePair(event)}
                     >
-                      尽早提醒开票
+                      加开票时间+双提醒
                     </button>
                     <button
                       type="button"
@@ -314,6 +354,13 @@ export default function App() {
                       onClick={() => exportCalendar(event, 'onsale')}
                     >
                       导出日历
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-small"
+                      onClick={() => addShowReminder(event)}
+                    >
+                      另加开演提醒
                     </button>
                     {event.ticketUrl && (
                       <a
@@ -334,20 +381,35 @@ export default function App() {
           <section className="panel" id="reminders">
             <div className="section-head">
               <h3>提醒清单</h3>
-              <p>{reminders.length} 条 · 开票尽早通知 + 浏览器 / ICS</p>
+              <p>
+                {reminders.length} 条 · 每条含提醒时间
+                {reminders.some((r) => r.onsaleAt) ? '与开票时间' : ''}
+              </p>
             </div>
             {reminders.length === 0 ? (
-              <p className="muted">还没有提醒。从上方未开票推荐点「尽早提醒开票」。</p>
+              <p className="muted">还没有提醒。点「加开票时间+双提醒」，会写入尽早 + 开票时刻两条。</p>
             ) : (
               <div className="stack">
                 {reminders.map((r) => (
                   <div key={r.id} className={`reminder ${dueIds.has(r.id) ? 'due' : ''}`}>
                     <strong>{r.label}</strong>
-                    <span className="muted">
-                      {r.kind === 'onsale' ? '开票·尽早' : r.kind === 'show' ? '开演' : '自定义'} ·{' '}
-                      {formatWhen(r.fireAt)}
-                      {dueIds.has(r.id) ? ' · 已通知' : ''}
-                    </span>
+                    <div className="meta time-block compact">
+                      <div>
+                        <span className="time-label">提醒时间</span>
+                        <strong>{formatWhen(r.fireAt)}</strong>
+                        {dueIds.has(r.id) ? ' · 已通知' : ''}
+                      </div>
+                      {r.onsaleAt && (
+                        <div>
+                          <span className="time-label">开票时间</span>
+                          <strong>{formatWhen(r.onsaleAt)}</strong>
+                        </div>
+                      )}
+                      <div>
+                        <span className="time-label">类型</span>
+                        <span>{kindLabel(r.kind)}</span>
+                      </div>
+                    </div>
                     <div className="actions">
                       <button
                         type="button"

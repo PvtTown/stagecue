@@ -363,6 +363,55 @@ input[type='datetime-local'] {
   font-size: 0.88rem;
 }
 
+.time-block {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.time-block > div {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.time-block.compact > div {
+  grid-template-columns: 4.5rem 1fr;
+}
+
+.time-label {
+  color: var(--accent);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+
+.how-alert {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.how-alert h4 {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.how-alert ol {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.how-alert strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .toast {
   position: fixed;
   left: 50%;
